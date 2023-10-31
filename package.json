@@ -1,0 +1,15 @@
+{
+  "name": "com.codysource.unity_mysql_api",
+  "version": "1.0.0",
+  "displayName": "Unity MySQL API",
+  "description": "This package allows for quick remote saves/loads to/from a php mysql database.",
+  "unity": "2020.3",
+  "unityRelease": "15f2",
+  "dependencies": {
+    "com.codysource.singleton": "1.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  },
+  "author": {
+    "name": "Cody Source"
+  }
+}
