@@ -42,7 +42,8 @@ namespace CodySource
             public void SetPayloadID(string pPayloadID) => payloadID = pPayloadID;
             public void Create(string pVal) => StartCoroutine(_SQL_Request(Method.POST,pVal));
             public void Update(string pVal) => StartCoroutine(_SQL_Request(Method.PUT,pVal));
-            public void Load() => StartCoroutine(_SQL_Request());
+            public void LoadID() => StartCoroutine(_SQL_Request(Method.GET,payloadID));
+            public void LoadAll() => StartCoroutine(_SQL_Request());
             public void Print(string pVal) => Debug.Log(pVal);
             public void ClearListeners()
             {
@@ -70,6 +71,7 @@ namespace CodySource
                 string payload = JsonConvert.SerializeObject(new { id = payloadID, value = pVal });
                 WWWForm form = new WWWForm();
                 if (isSave) form.AddField("payload", pVal);
+                url = (pMethod == Method.GET) ? url + $"?id={payloadID}" : url;
                 using (UnityWebRequest www = pMethod switch
                 {
                     (Method.POST) => UnityWebRequest.Post(url, form),
