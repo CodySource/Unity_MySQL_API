@@ -3,20 +3,33 @@
 //	Set error handler
 set_error_handler('ErrorHandle');
 
+//	Define return funtions
+function Respond($v,$e=null){die(json_encode(($v != null)?$v:(object)array('error'=>$e)));}
+
+///	Used to handle any errors
+function ErrorHandle($errNo,$errStr,$errFile,$errLine){$msg="$errStr in $errFile on line $errLine";error_log($msg);Respond(null,$errStr);}
+
 //	Import Creds & Keys
 require_once 'creds.php';
 require_once 'keys.php';
 
 //	Declare version & acquire necessary data
 const version = '1-0-0';
+$contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
 $providedVersion = isset($_SERVER['HTTP_API_VERSION']) ? $_SERVER['HTTP_API_VERSION'] : '';
-$providedKey = $_SERVER['HTTP_X_API_KEY']; $_SERVER['HTTP_X_API_KEY'] : '';
+$providedKey = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
+$providedLength = isset($_SERVER['CONTENT_LENGTH']) ? $_SERVER['CONTENT_LENGTH'] : 0;
+$postContents = file_get_contents('php://input');
+$postLen = strlen($postContents);
 
 //	Ensure appropriate headers
-if ($providedVersion != version || !array_key_exists($providedKey,keys))
+if ($contentType != 'application/json' || $providedVersion != version || !array_key_exists($providedKey,keys) || $providedLength != $postLen)
 {
-	trigger_error('Mismatched api version or invalid api key supplied.');
+	trigger_error("Mismatched content type, api version, content length, or invalid api key supplied.");
 }
+
+//	Configure postData
+$postData = json_decode($postContents);
 
 //	Establish connection
 $mysqli = new mysqli(db_HOST, db_USER, db_PASS, db_NAME);
@@ -34,7 +47,7 @@ switch ($_SERVER['REQUEST_METHOD']) {
 		break;
 	case 'PUT':
 		$data = _ScreenPostData();
-		$data = (object)array_merge((array)$data,array('WHERE'=>' WHERE id = "$data->id"'));
+		//$data = (object)array_merge((array)$data,array('WHERE'=>' WHERE id = "$data->id"'));
 		UPDATE($data);
 		break;
 	default:
@@ -61,46 +74,42 @@ function GET($where)
 //	Screens the id and value post fields 
 function _ScreenPostData()
 {
-	if (!isset($_POST['id']) || !isset($_POST['value']))
-		trigger_error('Invalid submission -- Missing id and/or value.');
-	$id = $_POST['id'];
-	$value = json_decode($_POST['value']);
-	if ($value == null)
-		trigger_error('Invalid submission -- Value must be in json formatting.');
-	$value=(object)array_merge((array)$value,array('_timestamp'=>date(DATE_RFC3339)));
-	return (object)array('id'=>$id,'value'=>$value);
+	global $postData;
+	if (!isset($postData) || !isset($postData->id) || !isset($postData->value)) 
+		trigger_error('Invalid submission: Missing id or value.');
+	$id = $postData->id;
+	$value = json_decode($postData->value);
+	if (!$value)
+		trigger_error('Invalid submission: Value must be in json formatting.');
+	$value = (object)array_merge((array)$value,array('_timestamp'=>date(DATE_RFC3339)));
+	return (object)array('id'=>$id,'value'=>json_encode($value));
 }
 
 //	Push new content to the database
 function POST($data)
 {
-	global $mysqli, $providedKey, $where;
+	global $mysqli, $providedKey;
 	$table = keys[$providedKey];
-	if (!$mysqli->query("CREATE TABLE IF NOT EXISTS $table (id VARCHAR(1023) PRIMARY KEY, value TEXT);")) o(null, $mysqli->error);
-	$q = $mysqli->prepare("INSERT INTO $table (id, value) VALUES('".(($data->id != -1)? $$data->id : $result->num_rows)."', ?)");
+	if (!$mysqli->query("CREATE TABLE IF NOT EXISTS $table (id VARCHAR(1023) PRIMARY KEY, value TEXT);")) trigger_error($mysqli->error);
+	$result = $mysqli->query("SELECT * FROM $table");
+	$q = $mysqli->prepare("INSERT INTO $table (id, value) VALUES('".(($data->id != -1)? $data->id : $result->num_rows)."', ?)");
 	$q->bind_param('s', $data->value);
-	if (!$q->execute()) o(null, $mysqli->error);
-	o(date(DATE_RFC3339), null);
+	if (!$q->execute()) trigger_error('Unexpected error: Please check that the ID supplied does not already exist.');
+	Respond(date(DATE_RFC3339));
 }
 
 //	Update existing database content
 function UPDATE($data)
 {
-	global $mysqli, $providedKey, $where;
+	global $mysqli, $providedKey;
 	$table = keys[$providedKey];
-	if (!$mysqli->query("CREATE TABLE IF NOT EXISTS $table (id VARCHAR(1023) PRIMARY KEY, value TEXT);")) o(null, $mysqli->error);
+	if (!$mysqli->query("CREATE TABLE IF NOT EXISTS $table (id VARCHAR(1023) PRIMARY KEY, value TEXT);")) trigger_error($mysqli->error);
 	$result = $mysqli->query("SELECT * FROM $table WHERE id='$data->id'");
-	if ($result->num_rows == 0) trigger_error('Invalid submission -- ID not found.');
-	$q = $mysqli->prepare("UPDATE $table SET id=? WHERE value='$data->value'");
-	$q->bind_param('s', $data->id);
-	if (!$q->execute()) o(null, $mysqli->error);
-	o(date(DATE_RFC3339), null);
+	if ($result->num_rows == 0) trigger_error('Invalid submission: ID not found.');
+	$q = $mysqli->prepare("UPDATE $table SET value=? WHERE id='$data->id'");
+	$q->bind_param('s', $data->value);
+	if (!$q->execute()) trigger_error($mysqli->error);
+	Respond(date(DATE_RFC3339));
 }
-
-//	Define return funtions
-function Respond($v,$e=null){die(json_encode(($v != null)?$v:(object)array('error'=>$e)));}
-
-///	Used to handle any errors
-function ErrorHandle($errNo,$errStr,$errFile,$errLine){$msg="$errStr in $errFile on line $errLine";error_log($msg);Respond(null,$errStr);}
 
 ?>
